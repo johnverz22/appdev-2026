@@ -299,7 +299,7 @@ The **OpenAPI Generator Maven Plugin** generates Java interfaces from the specif
 
 **To generate code:**
 ```bash
-mvn clean generate-sources
+.\mvnw.cmd clean generate-sources
 ```
 
 ---
@@ -402,10 +402,10 @@ spring.datasource.password=1234
 **3. Build and run:**
 ```bash
 # Generate OpenAPI code and build
-mvn clean package
+.\mvnw.cmd clean package
 
 # Run the application
-mvn spring-boot:run
+.\mvnw.cmd spring-boot:run
 ```
 
 #### Option B: Using Docker for PostgreSQL
@@ -422,8 +422,8 @@ docker run --name postgres-db \
 
 **2. Build and run the application:**
 ```bash
-mvn clean package
-mvn spring-boot:run
+.\mvnw.cmd clean package
+.\mvnw.cmd spring-boot:run
 ```
 
 **Application will start on:** `http://localhost:8080`
@@ -458,7 +458,7 @@ docker run --name postgres-db \
 
 ```bash
 cd app #or your root directory
-mvn clean package -DskipTests
+.\mvnw.cmd clean package -DskipTests
 ```
 
 This creates: `target/product-api-1.0.0.jar`
@@ -671,7 +671,7 @@ server.port=8081
 
 **Solution:**
 ```bash
-mvn clean generate-sources
+.\mvnw.cmd clean generate-sources
 ```
 
 Check `target/generated-sources/openapi/` for generated files
