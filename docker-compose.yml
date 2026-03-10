@@ -1,0 +1,65 @@
+services:
+
+  # ── PostgreSQL (one server, two databases) ─────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB:       postgres   # default DB (not used by services)
+    volumes:
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+
+  # ── PHP service — manages products (php_db) ────────────────────
+  php-service:
+    build: ./php-service
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: php_db
+      DB_USER: postgres
+      DB_PASS: password
+    volumes:
+      - ./php-service:/app   # live-mount: edit index.php without rebuilding
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+
+  # ── Java service — manages orders (java_db) ────────────────────
+  java-service:
+    build: ./java-service
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: java_db
+      DB_USER: postgres
+      DB_PASS: password
+      # Inter-service URL: java-service calls php-service by Docker service name
+      PRODUCT_SERVICE_URL: http://php-service:8000
+    ports:
+      - "8081:8081"
+    depends_on:
+      - postgres
+      - php-service   # ensure php-service is up before java-service starts
+
+  # ── React frontend ─────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # These URLs are baked into the React bundle at build time.
+        # They must be reachable from the USER'S browser, so use localhost.
+        REACT_APP_PHP_URL:  http://localhost:8000
+        REACT_APP_JAVA_URL: http://localhost:8081
+    ports:
+      - "3000:3000"
+    depends_on:
+      - php-service
+      - java-service
+
+volumes:
+  pg_data:
