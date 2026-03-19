@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, User, UserPlus, ShieldCheck } from 'lucide-react';
+import { Lock, User, UserPlus, ShieldCheck } from 'lucide-react';
 import api from '../config/axios';
 
 const Register = () => {

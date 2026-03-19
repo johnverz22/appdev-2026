@@ -1,14 +1,10 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutDashboard, LogOut } from 'lucide-react';
+import { LayoutDashboard, LogOut, User } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
 
 const Dashboard = () => {
-    const navigate = useNavigate();
-
-    const handleLogout = () => {
-        // TODO: clear token/session
-        navigate('/login');
-    };
+    const { user, logout } = useAuth();
 
     return (
         <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
@@ -19,11 +15,20 @@ const Dashboard = () => {
                 <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-400 mb-2">
                     Dashboard
                 </h1>
+
+                {user && (
+                    <div className="flex items-center justify-center gap-2 text-slate-300 text-sm mt-1 mb-6">
+                        <User className="w-4 h-4 text-emerald-400" />
+                        <span>Logged in as <span className="text-emerald-400 font-semibold">{user.username}</span></span>
+                    </div>
+                )}
+
                 <p className="text-slate-400 text-sm mb-8">
-                    You're logged in! This is a placeholder page.
+                    Your session persists across page refreshes via HttpOnly cookie. 🍪
                 </p>
+
                 <button
-                    onClick={handleLogout}
+                    onClick={logout}
                     className="w-full py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-medium rounded-xl shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
                 >
                     <LogOut className="w-5 h-5" />

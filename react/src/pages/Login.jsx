@@ -1,24 +1,21 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { User, Lock, ArrowRight, Activity } from 'lucide-react'; // Changed Mail to User
-import api from '../config/axios';
+import { Link } from 'react-router-dom';
+import { User, Lock, ArrowRight, Activity } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
 
 const Login = () => {
-    const [username, setUsername] = useState(''); // Changed from email
+    const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const navigate = useNavigate();
+    const { login } = useAuth();
 
     const handleLogin = async (e) => {
         e.preventDefault();
         setIsLoading(true);
         setError('');
-
         try {
-            // Updated payload to send username
-            await api.post('/api/auth/login', { username, password });
-            navigate('/dashboard');
+            await login(username, password);
         } catch (err) {
             setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
         } finally {
@@ -32,7 +29,6 @@ const Login = () => {
             <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/30 rounded-full blur-[120px] pointer-events-none" />
 
             <div className="w-full max-w-md bg-white/10 backdrop-blur-lg border border-white/20 rounded-3xl shadow-2xl overflow-hidden transform transition-all hover:scale-[1.01] duration-500">
-
                 <div className="p-8">
                     <div className="text-center mb-8">
                         <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-500 to-purple-600 mb-6 shadow-lg shadow-blue-500/30 text-white">
@@ -54,11 +50,10 @@ const Login = () => {
                         )}
 
                         <div className="space-y-1">
-                            {/* Label updated to Username */}
                             <label className="text-sm font-medium text-slate-300 ml-1">Username</label>
                             <div className="relative group">
                                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-blue-400 transition-colors">
-                                    <User className="w-5 h-5" /> {/* Changed icon to User */}
+                                    <User className="w-5 h-5" />
                                 </div>
                                 <input
                                     type="text"
