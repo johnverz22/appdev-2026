@@ -1,65 +1,67 @@
 services:
-
-  # ── PostgreSQL (one server, two databases) ─────────────────────
-  postgres:
-    image: postgres:16-alpine
+  # Database
+  db:
+    image: postgres:15-alpine
+    container_name: postgres_db
     environment:
-      POSTGRES_USER:     postgres
+      POSTGRES_DB: auth_db
+      POSTGRES_USER: user
       POSTGRES_PASSWORD: password
-      POSTGRES_DB:       postgres   # default DB (not used by services)
+    ports:
+      - "5434:5432" # Host 5434 -> Container 5432
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d auth_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     volumes:
-      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - pg_data:/var/lib/postgresql/data
-    ports:
-      - "5433:5432"
+      - postgres_data:/var/lib/postgresql/data
 
-  # ── PHP service — manages products (php_db) ────────────────────
-  php-service:
-    build: ./php-service
+
+  # Auth service
+  sb:
+    # Use a pre-built JDK image instead of building a local Dockerfile
+    image: eclipse-temurin:17-jdk-alpine 
+    container_name: springboot_app
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
     environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: php_db
-      DB_USER: postgres
-      DB_PASS: password
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/auth_db
+      - SPRING_DATASOURCE_USERNAME=user
+      - SPRING_DATASOURCE_PASSWORD=password
+      - JWT_SECRET=Zm9ydHktdHdvLWlzLXRoZS1hbnN3ZXItdG8tbGlmZS10aGUtdW5pdmVyc2UtYW5kLWV2ZXJ5dGhpbmc=
+      - SPRING_DEVTOOLS_RESTART_ENABLED=true
     volumes:
-      - ./php-service:/app   # live-mount: edit index.php without rebuilding
-    ports:
-      - "8000:8000"
-    depends_on:
-      - postgres
+      - ./sb:/app              # Maps your local 'sb' folder to /app in the container
+      - ~/.m2:/root/.m2        # Caches Maven dependencies in your WSL home
+    working_dir: /app
+    # The container starts, sees your files via the volume, and runs them
+    command: ./mvnw spring-boot:run
 
-  # ── Java service — manages orders (java_db) ────────────────────
-  java-service:
-    build: ./java-service
+
+  react:
+    image: node:20-alpine
+    container_name: react_front
+    depends_on:
+      - sb
+    ports:
+      - "3000:5173"
     environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: java_db
-      DB_USER: postgres
-      DB_PASS: password
-      # Inter-service URL: java-service calls php-service by Docker service name
-      PRODUCT_SERVICE_URL: http://php-service:8000
-    ports:
-      - "8081:8081"
-    depends_on:
-      - postgres
-      - php-service   # ensure php-service is up before java-service starts
-
-  # ── React frontend ─────────────────────────────────────────────
-  frontend:
-    build:
-      context: ./frontend
-      args:
-        # These URLs are baked into the React bundle at build time.
-        # They must be reachable from the USER'S browser, so use localhost.
-        REACT_APP_PHP_URL:  http://localhost:8000
-        REACT_APP_JAVA_URL: http://localhost:8081
-    ports:
-      - "3000:3000"
-    depends_on:
-      - php-service
-      - java-service
+      - VITE_API_BASE_URL=http://localhost:8080
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      - ./react:/app
+      - /app/node_modules
+    working_dir: /app
+    # Install linux-compatible node_modules on startup before running dev server
+    command: sh -c "npm install && npm run dev -- --host"  # --- PHP API Service ---
 
 volumes:
-  pg_data:
+  postgres_data: #persist db data
+
+
+# error getting credentials - err: fork/exec /mnt/c/Program Files/Docker/Docker/resources/bin/docker-credential-desktop.exe: exec format error, out: ``
+#    after running docker compose:
