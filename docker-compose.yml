@@ -17,6 +17,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+    # to login to this container: docker exec -it postgres_db psql -U user -d auth_db
 
   # Auth service
   sb:
@@ -40,6 +41,35 @@ services:
     working_dir: /app
     # The container starts, sees your files via the volume, and runs them
     command: ./mvnw spring-boot:run
+
+  php:
+    image: php:8.2-apache
+    container_name: php_api
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8081:80"
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=user
+      - DB_PASSWORD=password
+      - DB_NAME=auth_db
+      - JWT_SECRET=Zm9ydHktdHdvLWlzLXRoZS1hbnN3ZXItdG8tbGlmZS10aGUtdW5pdmVyc2UtYW5kLWV2ZXJ5dGhpbmc=
+    volumes:
+      - ./php:/var/www/html
+    working_dir: /var/www/html
+    #install php dependencies, pdo_pgsql, composer
+    command: >
+      bash -c "
+      apt-get update && 
+      apt-get install -y libpq-dev git unzip && 
+      docker-php-ext-install pdo pdo_pgsql && 
+      curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer && 
+      composer install && 
+      apache2-foreground
+      "
 
 
   react:
