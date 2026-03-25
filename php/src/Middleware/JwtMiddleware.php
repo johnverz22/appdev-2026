@@ -35,9 +35,13 @@ class JwtMiddleware
             self::abort(500, 'JWT_SECRET not configured on server');
         }
 
+        // Spring Boot Base64-decodes the secret before signing,
+        // so PHP must do the same to use the same raw key bytes.
+        $keyBytes = base64_decode($secret);
+
         try {
             // SB signs tokens with HMAC-SHA256
-            $decoded = JWT::decode($token, new Key($secret, 'HS256'));
+            $decoded = JWT::decode($token, new Key($keyBytes, 'HS256'));
             return $decoded;
 
         } catch (ExpiredException) {
