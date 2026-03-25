@@ -1,34 +1,24 @@
 <?php
 
-echo "hello world";
-exit();
+declare(strict_types=1);
 
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type");
-header("Content-Type:application/json");
+// ── CORS headers ─────────────────────────────────────────────────────────────
+// Must be a specific origin (not '*') when withCredentials=true is used
+$allowedOrigin = getenv('CORS_ORIGIN') ?: 'http://localhost:3000';
+header("Access-Control-Allow-Origin: $allowedOrigin");
+header('Access-Control-Allow-Credentials: true');
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type');
+header('Content-Type: application/json');
 
-$host = getenv('DB_HOST') ?: "localhost";
-$port = getenv('DB_PORT') ?: 5432;
-$db = getenv('DB_NAME') ?: 'php_db';
-$user = getenv('DB_USER') ?: 'postgres';
-$pass = getenv('DB_PASSWORD') ?: 'secret';
-
-
-// CONNECT TO DATABASE
-try{
-    $pdo = new PDO("pgsql:host=$host;port=$port;dbname=$db", $user, $pass, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-    ]);
-
-} catch(PDOException $e){
-    http_response_code(500);
-    echo json_encode(['error'=> 'DB connection failed: ' . $e->getMessage()]);
+// Handle pre-flight
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
     exit();
 }
 
+// ── Autoloader (Composer) ─────────────────────────────────────────────────────
+require_once __DIR__ . '/vendor/autoload.php';
 
-$stmt = $pdo->prepare("Select * from products");
-$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-echo json_encode($rows);
-exit();
+// ── Routes ───────────────────────────────────────────────────────────────────
+require_once __DIR__ . '/src/routes.php';

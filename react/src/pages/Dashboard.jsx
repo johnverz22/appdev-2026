@@ -1,6 +1,6 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { LayoutDashboard, LogOut, User } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { LayoutDashboard, LogOut, User, ShoppingBag } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 const Dashboard = () => {
@@ -23,9 +23,18 @@ const Dashboard = () => {
                     </div>
                 )}
 
-                <p className="text-slate-400 text-sm mb-8">
+                <p className="text-slate-400 text-sm mb-6">
                     Your session persists across page refreshes via HttpOnly cookie. 🍪
                 </p>
+
+                {/* Navigate to PHP-backed product catalog */}
+                <Link
+                    to="/catalog"
+                    className="w-full py-3 px-4 mb-3 bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white font-medium rounded-xl shadow-lg shadow-violet-500/25 flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                >
+                    <ShoppingBag className="w-5 h-5" />
+                    Browse Catalog
+                </Link>
 
                 <button
                     onClick={logout}

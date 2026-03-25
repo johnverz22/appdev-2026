@@ -1,6 +1,0 @@
-Create containers for:
- - php app
- - java app
- - db postresql
- - frontend
- - python django

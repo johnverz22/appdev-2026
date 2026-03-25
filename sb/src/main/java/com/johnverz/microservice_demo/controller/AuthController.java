@@ -41,12 +41,16 @@ public class AuthController {
     @Value("${jwt.expiration}")
     private int jwtExpirationMs;
 
+    @Value("$jwt..cookie.domain")
+    private int jwtDomain;
+
     // ── helpers ──────────────────────────────────────────────
 
     private Cookie buildJwtCookie(String token) {
         Cookie cookie = new Cookie("jwt", token);
         cookie.setHttpOnly(true);
         cookie.setPath("/");
+        cookie.setDomain(jwtDomain); // share across all localhost ports
         cookie.setMaxAge(jwtExpirationMs / 1000); // convert ms → seconds
         // cookie.setSecure(true); // uncomment in production (HTTPS)
         return cookie;
@@ -56,6 +60,7 @@ public class AuthController {
         Cookie cookie = new Cookie("jwt", "");
         cookie.setHttpOnly(true);
         cookie.setPath("/");
+        cookie.setDomain(jwtDomain);
         cookie.setMaxAge(0); // immediately expire
         return cookie;
     }
