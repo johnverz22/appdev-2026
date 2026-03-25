@@ -42,7 +42,7 @@ public class AuthController {
     private int jwtExpirationMs;
 
     @Value("$jwt..cookie.domain")
-    private int jwtDomain;
+    private String jwtDomain;
 
     // ── helpers ──────────────────────────────────────────────
 
