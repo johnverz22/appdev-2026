@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Lock, User, UserPlus, ShieldCheck } from 'lucide-react';
-import api from '../config/axios';
+import { useAuth } from '../hooks/useAuth';
 
 const Register = () => {
     const [formData, setFormData] = useState({
@@ -11,7 +11,7 @@ const Register = () => {
     });
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const navigate = useNavigate();
+    const { register } = useAuth();
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -29,14 +29,7 @@ const Register = () => {
         setIsLoading(true);
 
         try {
-            // Endpoint may vary based on your Spring Boot setup
-            await api.post('/api/auth/register', {
-                username: formData.username,
-                password: formData.password
-            });
-
-            // HttpOnly cookie is set automatically. Redirect to dashboard.
-            navigate('/dashboard');
+            await register(formData.username, formData.password);
         } catch (err) {
             setError(err.response?.data?.message || 'Registration failed. Please try again.');
         } finally {

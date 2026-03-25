@@ -21,12 +21,13 @@ public class JwtUtils {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    public String generateToken(String username) {
+    public String generateToken(String username, String role) {
         return Jwts.builder()
                 .setSubject(username)
+                .claim("roles", java.util.List.of(role))
                 .setIssuedAt(new java.util.Date())
                 .setExpiration(new java.util.Date((new java.util.Date()).getTime() + jwtExpirationMs))
-                .signWith(getSigningKey(), SignatureAlgorithm.HS256) // Use the fixed key
+                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
                 .compact();
     }
 

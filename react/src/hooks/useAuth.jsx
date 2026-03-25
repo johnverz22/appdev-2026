@@ -33,6 +33,12 @@ export const AuthProvider = ({ children }) => {
         navigate('/dashboard');
     }, [navigate]);
 
+    const register = useCallback(async (username, password) => {
+        const { data } = await api.post('/api/auth/register', { username, password });
+        setUser(data);
+        navigate('/dashboard');
+    }, [navigate]);
+
     const logout = useCallback(async () => {
         try {
             await api.post('/api/auth/logout');
@@ -43,7 +49,7 @@ export const AuthProvider = ({ children }) => {
     }, [navigate]);
 
     return (
-        <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, logout }}>
+        <AuthContext.Provider value={{ user, isAuthenticated: !!user, isAdmin: user?.role === 'ROLE_ADMIN', isLoading, login, register, logout }}>
             {children}
         </AuthContext.Provider>
     );

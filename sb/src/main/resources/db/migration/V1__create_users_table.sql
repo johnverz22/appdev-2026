@@ -4,7 +4,5 @@ CREATE TABLE users (
     password VARCHAR(100) NOT NULL,
     role VARCHAR(20) NOT NULL
 );
-
--- Optional: Initial admin user (password: password)
-INSERT INTO users (username, password, role) 
-VALUES ('admin', '$2a$10$8.UnVuG9HHgffUDAlk8KnuyWfnyuhdzWMHmUm1u5DBGxuyQXm2AFu', 'ROLE_ADMIN');
+-- Admin account is seeded automatically by AuthController on startup
+-- using admin.username and admin.password from application.properties.

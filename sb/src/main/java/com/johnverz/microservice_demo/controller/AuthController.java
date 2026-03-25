@@ -2,6 +2,8 @@ package com.johnverz.microservice_demo.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -26,33 +28,36 @@ import java.util.Map;
 @RequestMapping("/api/auth")
 public class AuthController {
 
-    @Autowired
-    private AuthenticationManager authenticationManager;
+    @Autowired private AuthenticationManager authenticationManager;
+    @Autowired private UserRepository userRepository;
+    @Autowired private PasswordEncoder encoder;
+    @Autowired private JwtUtils jwtUtils;
 
-    @Autowired
-    private UserRepository userRepository;
+    @Value("${jwt.expiration}")      private int    jwtExpirationMs;
+    @Value("${jwt.cookie.domain}")   private String jwtDomain;
+    @Value("${admin.username}")      private String adminUsername;
+    @Value("${admin.password}")      private String adminPassword;
 
-    @Autowired
-    private PasswordEncoder encoder;
+    // ── Seed admin account on startup ─────────────────────────────────────────
+    @EventListener(ApplicationReadyEvent.class)
+    public void seedAdmin() {
+        if (userRepository.findByUsername(adminUsername).isEmpty()) {
+            userRepository.save(new User(
+                adminUsername,
+                encoder.encode(adminPassword),
+                "ROLE_ADMIN"
+            ));
+            System.out.println("[Auth] Admin account created: " + adminUsername);
+        }
+    }
 
-    @Autowired
-    private JwtUtils jwtUtils;
-
-    @Value("${jwt.expiration}")
-    private int jwtExpirationMs;
-
-    @Value("${jwt.cookie.domain}")
-    private String jwtDomain;
-
-    // ── helpers ──────────────────────────────────────────────
-
+    // ── Helpers ───────────────────────────────────────────────────────────────
     private Cookie buildJwtCookie(String token) {
         Cookie cookie = new Cookie("jwt", token);
         cookie.setHttpOnly(true);
         cookie.setPath("/");
-        cookie.setDomain(jwtDomain); // share across all localhost ports
-        cookie.setMaxAge(jwtExpirationMs / 1000); // convert ms → seconds
-        // cookie.setSecure(true); // uncomment in production (HTTPS)
+        cookie.setDomain(jwtDomain);
+        cookie.setMaxAge(jwtExpirationMs / 1000);
         return cookie;
     }
 
@@ -61,64 +66,75 @@ public class AuthController {
         cookie.setHttpOnly(true);
         cookie.setPath("/");
         cookie.setDomain(jwtDomain);
-        cookie.setMaxAge(0); // immediately expire
+        cookie.setMaxAge(0);
         return cookie;
     }
 
-    // ── endpoints ────────────────────────────────────────────
-
+    // ── POST /api/auth/login ──────────────────────────────────────────────────
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest,
                                    HttpServletResponse response) {
         try {
             Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(
-                            loginRequest.getUsername(), loginRequest.getPassword()));
+                new UsernamePasswordAuthenticationToken(
+                    loginRequest.getUsername(), loginRequest.getPassword()));
 
-            String jwt = jwtUtils.generateToken(authentication.getName());
+            String username = authentication.getName();
+            String role = userRepository.findByUsername(username)
+                .map(User::getRole).orElse("ROLE_USER");
+
+            String jwt = jwtUtils.generateToken(username, role);
             response.addCookie(buildJwtCookie(jwt));
-            return ResponseEntity.ok(Map.of("username", authentication.getName()));
+            return ResponseEntity.ok(Map.of("username", username, "role", role));
 
         } catch (BadCredentialsException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("message", "Invalid username or password"));
+                .body(Map.of("message", "Invalid username or password"));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("message", "Authentication failed"));
+                .body(Map.of("message", "Authentication failed"));
         }
     }
 
+    // ── POST /api/auth/register ───────────────────────────────────────────────
+    // Public registration always creates ROLE_USER accounts.
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody SignupRequest signUpRequest,
                                       HttpServletResponse response) {
         if (userRepository.findByUsername(signUpRequest.getUsername()).isPresent()) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(Map.of("message", "Username is already taken"));
+                .body(Map.of("message", "Username is already taken"));
         }
 
-        User user = new User(
-                signUpRequest.getUsername(),
-                encoder.encode(signUpRequest.getPassword()),
-                "ROLE_USER");
-        userRepository.save(user);
+        String role = "ROLE_USER";
+        userRepository.save(new User(
+            signUpRequest.getUsername(),
+            encoder.encode(signUpRequest.getPassword()),
+            role
+        ));
 
-        String jwt = jwtUtils.generateToken(signUpRequest.getUsername());
+        String jwt = jwtUtils.generateToken(signUpRequest.getUsername(), role);
         response.addCookie(buildJwtCookie(jwt));
-        return ResponseEntity.ok(Map.of("username", signUpRequest.getUsername()));
+        return ResponseEntity.ok(Map.of("username", signUpRequest.getUsername(), "role", role));
     }
 
+    // ── POST /api/auth/logout ─────────────────────────────────────────────────
     @PostMapping("/logout")
     public ResponseEntity<?> logout(HttpServletResponse response) {
         response.addCookie(expiredJwtCookie());
         return ResponseEntity.ok(Map.of("message", "Logged out"));
     }
 
+    // ── GET /api/auth/me ──────────────────────────────────────────────────────
     @GetMapping("/me")
     public ResponseEntity<?> me() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated() || auth.getPrincipal().equals("anonymousUser")) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        return ResponseEntity.ok(Map.of("username", auth.getName()));
+        String username = auth.getName();
+        String role = userRepository.findByUsername(username)
+            .map(User::getRole).orElse("ROLE_USER");
+        return ResponseEntity.ok(Map.of("username", username, "role", role));
     }
 }

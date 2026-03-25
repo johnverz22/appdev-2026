@@ -1,212 +1,220 @@
-# PHP — Products Microservice
+# PHP Products Microservice
 
-This service exposes a product catalog API. It runs on **port 8081** and is protected by the same JWT token that Spring Boot issues on login.
-
----
-
-## What Does This Service Do?
-
-- Serves a list of products from the database (`GET /products`)
-- Validates the JWT cookie on every protected request
-- Returns JSON responses
-
-It does **not** handle login or user management. That's Spring Boot's job.
+This is the products service in the microservice demo project.
+It is built with plain PHP + Composer and serves the product catalog with full CRUD.
 
 ---
 
-## Project Structure
+## How it fits in the project
+
+| Service | Tech | Port | Responsibility |
+|---------|------|------|----------------|
+| `sb` | Spring Boot | 8080 | Auth — login, register, issues JWT |
+| `php` | PHP | 8081 | Products — catalog listing + CRUD |
+| `django` | Django | 8082 | Checkout — place orders, order history |
+| `react` | React + Vite | 3000 | Frontend for all services |
+
+Authentication is shared. Spring Boot issues a JWT stored in an **HttpOnly cookie**.
+This service validates that same cookie using the shared `JWT_SECRET`.
+The JWT contains a `roles` claim so role-based access works without a DB lookup.
+
+---
+
+## Roles
+
+| Role | Can access |
+|------|-----------|
+| `ROLE_USER` | `GET /products`, `GET /products/{id}` |
+| `ROLE_ADMIN` | All of the above + `POST`, `PUT`, `DELETE /products` |
+
+---
+
+## Project structure
 
 ```
 php/
-├── composer.json          ← PHP dependency file (like package.json)
-├── composer.lock          ← Locked versions (auto-generated, don't edit)
-├── vendor/                ← Downloaded packages (like node_modules, git-ignored)
-├── index.php              ← Entry point — every request starts here
-├── init.sql               ← Seeds the products table in Postgres on first run
-├── .htaccess              ← Tells Apache to route all requests through index.php
-└── src/
-    ├── routes.php         ← Maps URLs to controller methods
-    ├── Core/
-    │   └── Router.php     ← Simple router class
-    ├── Controllers/
-    │   └── ProductController.php  ← Handles /products logic
-    └── Middleware/
-        └── JwtMiddleware.php      ← Validates the JWT cookie
+├── src/
+│   ├── Controllers/
+│   │   └── ProductController.php   # Business logic — no auth, no DB setup here
+│   ├── Core/
+│   │   ├── Database.php            # Singleton PDO connection (one place for DB config)
+│   │   └── Router.php              # HTTP router with {param} support
+│   ├── Middleware/
+│   │   └── JwtMiddleware.php       # JWT validation + role-based access
+│   └── routes.php                  # All routes — auth and roles declared per route
+├── index.php                       # Entry point — CORS headers + autoloader
+├── init.sql                        # DB seed (products table + sample data)
+├── composer.json
+└── Dockerfile
 ```
 
 ---
 
-## Core Concepts
+## Available endpoints
 
-### 1. Composer — PHP's Package Manager
+| Method | URL | Role | Description |
+|--------|-----|------|-------------|
+| GET | `/health` | none | Health check |
+| GET | `/products` | any auth | List all products |
+| GET | `/products/{id}` | any auth | Get a single product |
+| POST | `/products` | `ROLE_ADMIN` | Create a product |
+| PUT | `/products/{id}` | `ROLE_ADMIN` | Update a product |
+| DELETE | `/products/{id}` | `ROLE_ADMIN` | Delete a product |
 
-Composer does for PHP what `npm` does for JavaScript.
-
-```bash
-# Install all dependencies from composer.json
-composer install
-
-# Add a new package
-composer require some/package
-```
-
-This project uses one package:
+### POST / PUT request body
 
 ```json
-"require": {
-    "firebase/php-jwt": "^6.10"
-}
-```
-
-`firebase/php-jwt` decodes and verifies JWT tokens — the same tokens Spring Boot creates.
-
-### 2. How a Request Flows Through the App
-
-```
-Browser: GET http://localhost:8081/products
-        ↓
-Apache receives the request
-        ↓
-.htaccess rewrites the URL → runs index.php
-        ↓
-index.php sets CORS headers, loads Composer autoloader
-        ↓
-routes.php is included → Router matches GET /products
-        ↓
-ProductController::index() is called
-        ↓
-JwtMiddleware::authenticate() checks the cookie
-        ↓
-PDO queries PostgreSQL for products
-        ↓
-JSON response sent back to browser
-```
-
-### 3. `index.php` — The Entry Point
-
-Every single request goes through this file first. It:
-
-1. Sets CORS headers so the React frontend (on port 3000) is allowed to call this API
-2. Handles `OPTIONS` pre-flight requests (browsers send these before the real request)
-3. Loads the Composer autoloader (makes all packages and classes available)
-4. Includes `routes.php`
-
-```php
-// CORS must be set before any output
-header("Access-Control-Allow-Origin: http://localhost:3000");
-header('Access-Control-Allow-Credentials: true'); // required when sending cookies
-```
-
-> `withCredentials: true` on the React side and `Access-Control-Allow-Credentials: true` on the PHP side must both be set for cookies to work cross-origin.
-
-### 4. `.htaccess` — URL Rewriting
-
-Without this file, Apache would look for a physical file matching the URL. `/products` would return a 404 because there's no `products.php` file.
-
-```apache
-RewriteEngine On
-RewriteCond %{REQUEST_FILENAME} !-f   # not a real file
-RewriteCond %{REQUEST_FILENAME} !-d   # not a real directory
-RewriteRule ^ index.php [QSA,L]       # send everything to index.php
-```
-
-This is the same pattern used by Laravel, WordPress, and most PHP frameworks.
-
-### 5. `JwtMiddleware.php` — Protecting Routes
-
-This class reads the `jwt` cookie and verifies it:
-
-```php
-$token = $_COOKIE['jwt'] ?? null;  // read the cookie the browser sent
-
-$decoded = JWT::decode($token, new Key($secret, 'HS256'));
-// HS256 = HMAC-SHA256, same algorithm Spring Boot uses
-```
-
-- Cookie missing → `401 Unauthorized`
-- Token expired → `401 Unauthorized`
-- Signature invalid (wrong secret) → `401 Unauthorized`
-- All good → controller continues ✅
-
-The `JWT_SECRET` environment variable must match Spring Boot's exactly. This is how PHP knows it can trust the token.
-
-### 6. `ProductController.php` — Database Query
-
-Uses PHP's built-in `PDO` (PHP Data Objects) to query PostgreSQL:
-
-```php
-$pdo = new PDO('pgsql:host=db;port=5432;dbname=auth_db', $user, $pass);
-$stmt = $pdo->query('SELECT id, name, price, category, stock, image_url FROM products');
-$rows = $stmt->fetchAll(PDO::FETCH_ASSOC); // returns array of associative arrays
-echo json_encode($rows);
-```
-
-### 7. `init.sql` — Database Seeding
-
-This SQL file creates the `products` table and inserts sample data. Docker Compose mounts it into Postgres's init folder, which runs it automatically on first startup.
-
-```sql
-CREATE TABLE IF NOT EXISTS products ( ... );
-INSERT INTO products (name, price, ...) SELECT ...
-WHERE NOT EXISTS (SELECT 1 FROM products LIMIT 1); -- only if table is empty
-```
-
-> To re-run the seed: `docker compose down -v` then `docker compose up -d`
-
----
-
-## API Endpoints
-
-| Method | Path | Auth Required | Description |
-|---|---|---|---|
-| GET | `/health` | No | Check if the service is running |
-| GET | `/products` | Yes (JWT cookie) | List all products |
-
-### Example: Health Check
-
-```bash
-curl http://localhost:8081/health
-# → {"status":"ok","service":"php-products-api"}
-```
-
-### Example: Get Products (with cookie)
-
-```bash
-# After logging in via Spring Boot and saving the cookie:
-curl -b cookies.txt http://localhost:8081/products
-```
-
----
-
-## Adding a New Route
-
-1. Add a method to `ProductController.php` (or create a new controller):
-
-```php
-public function show(): void
 {
-    JwtMiddleware::authenticate();
-    $id = /* get from URL */;
-    // query by id...
+  "name": "Wireless Headphones",
+  "price": "89.99",
+  "category": "Electronics",
+  "stock": 42,
+  "image_url": "https://..."   // optional
 }
-```
-
-2. Register it in `routes.php`:
-
-```php
-$router->get('/products/{id}', [ProductController::class, 'show']);
 ```
 
 ---
 
-## Environment Variables (set by Docker Compose)
+## How the database connection works
 
-| Variable | Purpose |
-|---|---|
-| `DB_HOST` | Postgres hostname (`db` inside Docker) |
-| `DB_PORT` | Postgres port (5432 inside Docker) |
-| `DB_NAME` | Database name |
-| `DB_USER` | Database username |
-| `DB_PASSWORD` | Database password |
-| `JWT_SECRET` | Must match Spring Boot's secret exactly |
-| `CORS_ORIGIN` | Allowed frontend origin (default: `http://localhost:3000`) |
+All DB access goes through `Database::connection()` in `src/Core/Database.php`.
+It is a singleton — the connection is created once and reused for the request lifetime.
+
+```php
+use App\Core\Database;
+
+$pdo  = Database::connection();
+$stmt = $pdo->query('SELECT * FROM products');
+$rows = $stmt->fetchAll();
+```
+
+Never create `new PDO(...)` directly in a controller.
+All DB config lives in `Database.php` and is read from environment variables.
+
+---
+
+## How authentication works
+
+Authentication is declared in `src/routes.php`, not inside controllers.
+Call `JwtMiddleware::authenticate()` at the top of the route closure:
+
+```php
+$router->get('/products', function (array $params) {
+    JwtMiddleware::authenticate();          // any logged-in user
+    (new ProductController())->index();
+});
+```
+
+The method returns the decoded JWT payload if you need to read claims:
+
+```php
+$payload  = JwtMiddleware::authenticate();
+$username = $payload->sub;
+$roles    = $payload->roles ?? [];
+```
+
+Returns `401` if the cookie is missing or the token is invalid.
+
+---
+
+## How to add role-based protection
+
+Pass an array of allowed roles to `authenticate()`:
+
+```php
+// Admin only
+$router->post('/products', function (array $params) {
+    JwtMiddleware::authenticate(['ROLE_ADMIN']);
+    (new ProductController())->store();
+});
+
+// Either role accepted
+$router->delete('/products/{id}', function (array $params) {
+    JwtMiddleware::authenticate(['ROLE_ADMIN', 'ROLE_MANAGER']);
+    (new ProductController())->destroy((int) $params['id']);
+});
+```
+
+Returns `403 Forbidden` if the user's token doesn't contain a matching role.
+
+---
+
+## How to add a new route
+
+**Step 1** — Add a method to an existing controller, or create `src/Controllers/YourController.php`:
+
+```php
+public function show(int $id): void
+{
+    $stmt = Database::connection()->prepare(
+        'SELECT * FROM products WHERE id = ?'
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    $row ? $this->json($row) : $this->json(['error' => 'Not found.'], 404);
+}
+```
+
+**Step 2** — Register it in `src/routes.php`:
+
+```php
+$router->get('/products/{id}', function (array $params) {
+    JwtMiddleware::authenticate();
+    (new ProductController())->show((int) $params['id']);
+});
+```
+
+Path parameters like `{id}` are automatically extracted and passed as `$params['id']`.
+
+---
+
+## How to add a new controller
+
+Create `src/Controllers/CategoryController.php`:
+
+```php
+<?php
+declare(strict_types=1);
+namespace App\Controllers;
+use App\Core\Database;
+
+class CategoryController
+{
+    public function index(): void
+    {
+        $stmt = Database::connection()->query('SELECT DISTINCT category FROM products');
+        $this->json($stmt->fetchAll());
+    }
+
+    private function json(mixed $data, int $code = 200): void
+    {
+        http_response_code($code);
+        echo json_encode($data);
+    }
+}
+```
+
+Then register in `routes.php`:
+
+```php
+use App\Controllers\CategoryController;
+
+$router->get('/categories', function (array $params) {
+    JwtMiddleware::authenticate();
+    (new CategoryController())->index();
+});
+```
+
+---
+
+## Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_HOST` | `localhost` | Postgres host |
+| `DB_PORT` | `5432` | Postgres port |
+| `DB_NAME` | `auth_db` | Database name |
+| `DB_USER` | `postgres` | Database user |
+| `DB_PASSWORD` | `secret` | Database password |
+| `JWT_SECRET` | *(see docker-compose)* | Base64-encoded secret, must match Spring Boot |
+| `CORS_ORIGIN` | `http://localhost:3000` | Allowed frontend origin |
