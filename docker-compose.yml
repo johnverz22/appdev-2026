@@ -60,7 +60,7 @@ services:
       - JWT_SECRET=Zm9ydHktdHdvLWlzLXRoZS1hbnN3ZXItdG8tbGlmZS10aGUtdW5pdmVyc2UtYW5kLWV2ZXJ5dGhpbmc=
     volumes:
       - ./php:/var/www/html   # dev hot-reload; vendor/ must exist locally too
-
+      - php_vendor:/var/www/html/vendor
   # ── React frontend ─────────────────────────────────────────────────────────
   react:
     image: node:20-alpine
@@ -83,3 +83,4 @@ services:
 
 volumes:
   postgres_data:
+  php_vendor:
