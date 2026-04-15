@@ -9,33 +9,20 @@ from rest_framework import status
 
 def decode_jwt(request):
     """
-    Decodes the JWT from the HttpOnly 'jwt' cookie set by Spring Boot.
-    Returns the full payload dict on success.
-    Raises AuthenticationFailed on any error.
-
-    Payload example:
-        {
-            "sub": "john",          # username
-            "roles": ["ROLE_USER"], # list of roles (add in Spring Boot if needed)
-            "iat": 1700000000,
-            "exp": 1700003600
-        }
+    Reads identity headers injected by the API Gateway.
+    Returns a dictionary compatible with the existing decorator.
     """
-    token = request.COOKIES.get('jwt')
-    if not token:
-        raise AuthenticationFailed('Missing JWT cookie.')
+    username = request.META.get('HTTP_X_USER_NAME')
+    roles_str = request.META.get('HTTP_X_USER_ROLES', '')
+    roles = roles_str.split(',') if roles_str else []
 
-    try:
-        # JWT_SECRET is base64-encoded in env to match Spring Boot's config
-        secret = base64.b64decode(settings.JWT_SECRET).decode('utf-8')
-        payload = jwt.decode(token, secret, algorithms=['HS256'])
-        if not payload.get('sub'):
-            raise AuthenticationFailed('Invalid token: missing subject.')
-        return payload
-    except jwt.ExpiredSignatureError:
-        raise AuthenticationFailed('Token has expired.')
-    except jwt.InvalidTokenError as e:
-        raise AuthenticationFailed(f'Invalid token: {e}')
+    if not username:
+        raise AuthenticationFailed('Unauthorized: Missing identity header from Gateway.')
+
+    return {
+        'sub': username,
+        'roles': roles
+    }
 
 
 def require_auth(roles=None):

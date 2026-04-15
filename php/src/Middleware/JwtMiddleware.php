@@ -39,34 +39,23 @@ class JwtMiddleware
             exit();
         }
 
-        $token = $_COOKIE['jwt'] ?? null;
-        if (!$token) {
-            self::abort(401, 'No authentication cookie found. Please log in.');
+        $username = $_SERVER['HTTP_X_USER_NAME'] ?? null;
+        $rolesStr = $_SERVER['HTTP_X_USER_ROLES'] ?? '';
+        $userRoles = !empty($rolesStr) ? explode(',', $rolesStr) : [];
+
+        if (!$username) {
+            self::abort(401, 'Unauthorized: Missing identity header from Gateway.');
         }
 
-        $secret = getenv('JWT_SECRET');
-        if (!$secret) {
-            self::abort(500, 'JWT_SECRET not configured on server.');
-        }
-
-        // Spring Boot base64-encodes the secret in config, so decode it first
-        $keyBytes = base64_decode($secret);
-
-        try {
-            $payload = JWT::decode($token, new Key($keyBytes, 'HS256'));
-        } catch (ExpiredException) {
-            self::abort(401, 'Token has expired.');
-        } catch (SignatureInvalidException) {
-            self::abort(401, 'Token signature is invalid.');
-        } catch (\Exception $e) {
-            self::abort(401, 'Invalid token: ' . $e->getMessage());
-        }
+        // Create a payload object to maintain compatibility with controllers
+        $payload = (object) [
+            'sub'   => $username,
+            'roles' => $userRoles
+        ];
 
         // ── Role check ────────────────────────────────────────────────────────
         if (!empty($requiredRoles)) {
-            // Roles are stored as a JSON array claim in the JWT, e.g. ["ROLE_ADMIN"]
-            $userRoles = (array) ($payload->roles ?? []);
-            $hasRole   = !empty(array_intersect($requiredRoles, $userRoles));
+            $hasRole = !empty(array_intersect($requiredRoles, $userRoles));
 
             if (!$hasRole) {
                 self::abort(403, 'Forbidden: insufficient role.');
