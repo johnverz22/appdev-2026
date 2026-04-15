@@ -30,18 +30,41 @@ Once the Gateway validates your JWT, it extracts your username (e.g., `john_doe`
 ---
 
 ## 3. Implementation Steps
-
 ### Step 1: Setup Eureka Server (The Phonebook)
 Create a Spring Boot module in `./eureka-server`.
 *   **What it does:** It creates a registry where all your services will "check in" so they can find each other.
+
+> **💡 Why is the code so small? (The Magic)**
+> You might notice that your Eureka Server only has about 10 lines of code. This is the "magic" of Spring Boot. When you add the `@EnableEurekaServer` annotation, it acts as a **Master Switch**. 
+>
+> It automatically activates hundreds of pre-written features hidden inside the library you imported, including:
+> 1.  **The Dashboard:** That nice UI you see at port 8761.
+> 2.  **The Registration API:** The "reception desk" that other services call to check in.
+> 3.  **Heartbeat Monitoring:** A background system that constantly checks if your services are still "alive."
+>
+> You don't have to write the code because the library does all the heavy lifting for you!
+
+---
 
 ### Step 2: Setup API Gateway (The Front Door)
 Create a Spring Boot module in `./api-gateway`.
 *   **What it does:** This service will be the **only** one exposed to the internet. It will use a `GlobalFilter` (the `JwtAuthFilter.java`) to check every incoming request for a valid login token.
 
-### Step 3: Configure Routing (`application.properties`)
-This file tells the Gateway: *"If a request starts with `/api/products`, send it to the PHP container on port 80."*
-*   **LB (Load Balancer):** Notice `lb://sb`. This tells the Gateway to look in the **Eureka Phonebook** for a service named `sb` instead of using a hardcoded IP.
+### Step 3: Configure Routing (`application.yml`)
+This file is the "brain" of your Gateway. It contains the rules for where traffic should go.
+
+**Key Parts Explained:**
+1.  **`server.port: 8000`**: This is the only port you will open to the internet. All frontend calls must now point here.
+2.  **`discovery.locator.enabled: true`**: This tells the Gateway to talk to **Eureka** to find where other services are running.
+3.  **`routes`**:
+    *   **`id`**: A unique name for the route.
+    *   **`uri`**: Where the request is going. `lb://sb` tells it to use the Load Balancer to find the service named "sb" in Eureka. `http://php:80` uses the Docker container name.
+    *   **`predicates`**: The "If" condition. *"If the URL starts with /api/auth, then use this route."*
+    *   **`filters`**: Modifications to the request. **`RewritePath`** is crucial—it "trims" the URL. For example, it turns `/api/products/5` into just `/5` so the PHP backend (which doesn't know about the `/api/products` prefix) can understand it.
+
+```yaml
+# (See the full application.yml in the api-gateway folder for detailed comments)
+```
 
 ### Step 4: Update Backends to "Trust" the Gateway
 We changed the PHP, Django, and Spring Boot code to stop looking at the complex JWT token and start looking at the simple `X-User-Name` header.

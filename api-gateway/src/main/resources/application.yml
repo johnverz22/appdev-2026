@@ -1,0 +1,55 @@
+# ── Server Config ───────────────────────────────────────────────────────────
+server:
+  port: 8000 # The main entry point for your entire system
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      # Discovery Locator: Automatically finds services registered in Eureka
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      
+      # ── Routing Rules ──────────────────────────────────────────────────────
+      # These rules tell the Gateway where to send incoming requests.
+      routes:
+        # 1. Auth Service: Send /api/auth/** to the Spring Boot 'sb' service
+        - id: auth-service
+          uri: lb://sb # 'lb://' means look up 'sb' in the Eureka phonebook
+          predicates:
+            - Path=/api/auth/**
+
+        # 2. Products Service: Send /api/products/** to the PHP service
+        - id: products-service
+          uri: http://php:80 # Use Docker DNS for the PHP container
+          predicates:
+            - Path=/api/products/**
+          filters:
+            # RewritePath: Removes '/api/products' from the URL before sending to PHP
+            # e.g. /api/products/5 becomes /5 (which matches PHP's routes)
+            - RewritePath=/api/products(?<segment>/?.*), $\{segment}
+
+        # 3. Checkout Service: Send /api/checkout/** and /api/orders/** to Django
+        - id: checkout-service
+          uri: http://django:8000
+          predicates:
+            - Path=/api/checkout/**, /api/orders/**
+
+# ── Service Registry (Eureka) ────────────────────────────────────────────────
+eureka:
+  client:
+    service-url:
+      defaultZone: http://eureka-server:8761/eureka/
+
+# ── Security ─────────────────────────────────────────────────────────────────
+jwt:
+  secret: Zm9ydHktdHdvLWlzLXRoZS1hbnN3ZXItdG8tbGlmZS10aGUtdW5pdmVyc2UtYW5kLWV2ZXJ5dGhpbmc=
+
+# ── Properties Counterpart (Reference) ───────────────────────────────────────
+# ... (same as before)
+# server.port=8000
+# spring.application.name=api-gateway
+# ...
