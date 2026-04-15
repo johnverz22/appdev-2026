@@ -8,6 +8,11 @@ import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 
+/**
+ * JwtUtils — Simplified for Gateway architecture.
+ * Now only responsible for GENERATING tokens during login.
+ * Validation is handled by the API Gateway.
+ */
 @Component
 public class JwtUtils {
     @Value("${jwt.secret}")
@@ -29,28 +34,5 @@ public class JwtUtils {
                 .setExpiration(new java.util.Date((new java.util.Date()).getTime() + jwtExpirationMs))
                 .signWith(getSigningKey(), SignatureAlgorithm.HS256)
                 .compact();
-    }
-
-    public String getUsernameFromToken(String token) {
-        return Jwts.parserBuilder().setSigningKey(getSigningKey()).build()
-                .parseClaimsJws(token).getBody().getSubject();
-    }
-
-    public boolean validateToken(String token) {
-        try {
-            Jwts.parserBuilder().setSigningKey(getSigningKey()).build().parseClaimsJws(token);
-            return true;
-        } catch (io.jsonwebtoken.security.SignatureException e) {
-            System.err.println("Invalid JWT signature: " + e.getMessage());
-        } catch (io.jsonwebtoken.MalformedJwtException e) {
-            System.err.println("Invalid JWT token: " + e.getMessage());
-        } catch (io.jsonwebtoken.ExpiredJwtException e) {
-            System.err.println("JWT token is expired: " + e.getMessage());
-        } catch (io.jsonwebtoken.UnsupportedJwtException e) {
-            System.err.println("JWT token is unsupported: " + e.getMessage());
-        } catch (IllegalArgumentException e) {
-            System.err.println("JWT claims string is empty: " + e.getMessage());
-        }
-        return false;
     }
 }

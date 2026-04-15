@@ -1,13 +1,10 @@
 package com.johnverz.microservice_demo.security;
 
 import java.io.IOException;
-
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -16,11 +13,12 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+/**
+ * JwtAuthenticationFilter — Simplified for Gateway architecture.
+ * It now trusts the 'X-User-Name' header injected by the Gateway.
+ */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
-
-    @Autowired
-    private JwtUtils jwtUtils;
 
     @Autowired
     private CustomUserDetailsService customUserDetailsService;
@@ -28,51 +26,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        try {
-            String username = request.getHeader("X-User-Name");
-            String rolesHeader = request.getHeader("X-User-Roles");
+        String username = request.getHeader("X-User-Name");
 
-            if (username != null) {
-                // Trust the identity provided by the Gateway
-                UserDetails userDetails = customUserDetailsService.loadUserByUsername(username);
+        if (username != null) {
+            UserDetails userDetails = customUserDetailsService.loadUserByUsername(username);
 
-                UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(
-                                userDetails, null, userDetails.getAuthorities());
+            UsernamePasswordAuthenticationToken authentication =
+                    new UsernamePasswordAuthenticationToken(
+                            userDetails, null, userDetails.getAuthorities());
 
-                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authentication);
-            } else {
-                // Fallback to JWT cookie (useful for login/register or internal calls)
-                String jwt = parseJwtFromCookie(request);
-                if (jwt != null && jwtUtils.validateToken(jwt)) {
-                    String jwtUsername = jwtUtils.getUsernameFromToken(jwt);
-                    UserDetails userDetails = customUserDetailsService.loadUserByUsername(jwtUsername);
-
-                    UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(
-                                    userDetails, null, userDetails.getAuthorities());
-
-                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
-                }
-            }
-        } catch (Exception e) {
-            logger.error("Cannot set user authentication: {}", e);
+            authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+            SecurityContextHolder.getContext().setAuthentication(authentication);
         }
 
         filterChain.doFilter(request, response);
-    }
-
-    private String parseJwtFromCookie(HttpServletRequest request) {
-        Cookie[] cookies = request.getCookies();
-        if (cookies != null) {
-            for (Cookie cookie : cookies) {
-                if ("jwt".equals(cookie.getName())) {
-                    return cookie.getValue();
-                }
-            }
-        }
-        return null;
     }
 }

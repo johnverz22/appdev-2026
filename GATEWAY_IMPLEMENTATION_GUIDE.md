@@ -72,7 +72,24 @@ We changed the PHP, Django, and Spring Boot code to stop looking at the complex 
 
 ---
 
-## 4. Docker & Security: The "Lockdown"
+## 4. The Cleanup: Making Backends Lighter
+
+One of the biggest benefits of a Gateway is that your backends (PHP, Java, Python) become much simpler. Once the Gateway is the "bouncer," you can remove redundant code:
+
+### 1. Remove CORS from Backends
+The browser only talks to the Gateway (port 8000). This means only the Gateway needs to handle CORS. You can delete the complex CORS configuration from your Spring Boot, PHP, and Django apps.
+
+### 2. Simplify Authentication Filters
+Your backends no longer need to "math check" the JWT signature or check for expiration. They can simply read the `X-User-Name` header. 
+*   **Java example**: We simplified `JwtAuthenticationFilter` to just read the header and set the user in the Security Context.
+*   **PHP/Django example**: We removed the `JWT_SECRET` decoding logic and replaced it with a simple header check.
+
+### 3. Streamline JWT Utilities
+The `JwtUtils` class in Spring Boot now only has **one job**: `generateToken`. It no longer needs to validate or parse tokens, because the Gateway handles that at the "Edge."
+
+---
+
+## 5. Docker & Security: The "Lockdown"
 We updated `docker-compose.yml` to remove the `ports` section from the backend services.
 *   **Before:** You could visit `localhost:8081` to bypass security and see products.
 *   **After:** `localhost:8081` is now **closed**. The only way in is through the Gateway on `localhost:8000`. This is called "Network Isolation."
