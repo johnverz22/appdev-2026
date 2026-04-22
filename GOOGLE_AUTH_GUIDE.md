@@ -160,6 +160,60 @@ Rendered the physical Google Login elements inside the form schema.
 
 ---
 
+## Step 5: Per-Page Document Titles (`usePageTitle`)
+
+Each page in the React app sets the browser tab title using a shared `usePageTitle` hook located at `react/src/hooks/usePageTitle.js`.
+
+### How It Works
+
+```js
+// react/src/hooks/usePageTitle.js
+import { useEffect } from 'react';
+
+const APP_NAME = 'AppDev';
+
+export function usePageTitle(title) {
+    useEffect(() => {
+        document.title = title ? `${title} | ${APP_NAME}` : APP_NAME;
+        return () => { document.title = APP_NAME; }; // reset on unmount
+    }, [title]);
+}
+```
+
+- Pass a string → tab shows `"Page Name | AppDev"`
+- Pass `null` → tab shows just `"AppDev"`
+- On component unmount (page navigation), the title resets automatically.
+
+### Usage in a Page
+
+```jsx
+import { usePageTitle } from '../hooks/usePageTitle';
+
+const MyPage = () => {
+    usePageTitle('My Page');   // → "My Page | AppDev"
+    // ...
+};
+```
+
+### Current Page Titles
+
+| Page | Title shown in browser tab |
+|---|---|
+| `Login.jsx` | `Login \| AppDev` |
+| `Register.jsx` | `Register \| AppDev` |
+| `Dashboard.jsx` | `Dashboard \| AppDev` or `Admin Panel \| AppDev` (role-aware) |
+| `Catalog.jsx` | `Product Catalog \| AppDev` |
+| `Checkout.jsx` | `Checkout \| AppDev` |
+| `Orders.jsx` | `All Orders \| AppDev` |
+
+### Adding a New Page
+
+1. Import the hook: `import { usePageTitle } from '../hooks/usePageTitle';`
+2. Call it at the top of the component body: `usePageTitle('Your Page Name');`
+3. To change the app name that appears after the `|`, edit the `APP_NAME` constant in `usePageTitle.js`.
+
+---
+
 ## Troubleshooting
 
 ### `403 Forbidden` on `OPTIONS /api/auth/google` — CORS Missing Allow Origin
@@ -271,5 +325,121 @@ spring.application.name=sb
 ```properties
 # Use Docker service name and internal port — NOT localhost:5434
 spring.datasource.url=jdbc:postgresql://db:5432/auth_db
+```
+
+---
+
+### `500 Internal Server Error` on `GET /api/products` — Gateway RewritePath Produces Empty Path
+**Symptom**: Requests to `http://localhost:8000/api/products` return `500` from the gateway. PHP logs show no errors at all.
+
+**Cause**: The `RewritePath` filter was configured to strip `/api/products` from the path:
+```yaml
+- RewritePath=/api/products(?<segment>/?.*), ${segment}
+```
+When the request is exactly `/api/products` (no trailing slash or ID), the `segment` capture group is an empty string `""`. The gateway then tries to forward a request with an empty path to PHP — which is invalid and causes a gateway-level `500`.
+
+Additionally, PHP's routes are `/products`, `/products/{id}` etc., so stripping the full `/api/products` prefix would leave just `/` or `/{id}` — which doesn't match PHP's router either.
+
+**Fix**: Strip only the `/api` prefix so PHP always receives `/products`, `/products/{id}` etc. Also add `/api/products` (without `/**`) as an explicit predicate since `/**` alone does not match the path with no trailing segment:
+```yaml
+- id: products-service
+  uri: http://php:80
+  predicates:
+    - Path=/api/products,/api/products/**
+  filters:
+    # Strips /api → PHP receives /products, /products/5, etc.
+    - RewritePath=/api(?<segment>.*), ${segment}
+```
+
+Apply the same fix for the Django checkout/orders routes:
+```yaml
+- id: checkout-service
+  uri: http://django:8000
+  predicates:
+    - Path=/api/checkout,/api/checkout/**,/api/orders,/api/orders/**
+  filters:
+    # Strips /api → Django receives /checkout, /orders, /orders/all
+    - RewritePath=/api(?<segment>.*), ${segment}
+```
+
+---
+
+### Frontend Requests Hitting Wrong Paths (axios baseURL + Leading Slash)
+**Symptom**: All PHP and Django API calls return `404`. The browser shows the request going to `http://localhost:8000/products` instead of `http://localhost:8000/api/products`.
+
+**Cause**: Axios ignores the path portion of `baseURL` when the request path starts with `/`. For example:
+```js
+// baseURL = 'http://localhost:8000/api/products'
+phpApi.get('/products')
+// Resolves to: http://localhost:8000/products  ← WRONG
+// NOT:         http://localhost:8000/api/products/products
+```
+
+**Fix**: Keep `baseURL` as just the origin (`http://localhost:8000`) and include the full gateway path in every request:
+```js
+// Correct — full path in the request call
+phpApi.get('/api/products')          // → GET http://localhost:8000/api/products ✅
+djangoApi.get('/api/orders')         // → GET http://localhost:8000/api/orders ✅
+djangoApi.post('/api/checkout', ...) // → POST http://localhost:8000/api/checkout ✅
+```
+Update both `react/.env` and `docker-compose.yml` (the `environment:` block overrides `.env`):
+```
+VITE_PHP_API_URL=http://localhost:8000
+VITE_DJANGO_API_URL=http://localhost:8000
+```
+
+---
+
+### `CORS header 'Access-Control-Allow-Origin' does not match` — Double CORS Headers
+**Symptom**: Browser error: `CORS header 'Access-Control-Allow-Origin' does not match 'http://localhost:3000, http://localhost:3000'`. The header contains the value twice, separated by a comma.
+
+**Cause**: Both the API Gateway (via `globalcors`) and the backend service (PHP or Django) are independently setting `Access-Control-Allow-Origin`. The browser receives a header with two identical values and rejects it as invalid.
+
+**Fix**: Remove CORS configuration from all downstream services — the API Gateway is the single source of truth for CORS.
+
+- **PHP** (`php/index.php`): Delete the `Access-Control-Allow-Origin`, `Access-Control-Allow-Credentials`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers` header lines and the `OPTIONS` preflight handler block.
+
+- **Django** (`django/core/settings.py`): Remove `corsheaders` from `INSTALLED_APPS`, remove `corsheaders.middleware.CorsMiddleware` from `MIDDLEWARE`, and delete `CORS_ALLOW_ALL_ORIGINS`/`CORS_ALLOW_CREDENTIALS`. Also add `APPEND_SLASH = False` so Django accepts paths without trailing slashes:
+```python
+MIDDLEWARE = [
+    'django.middleware.common.CommonMiddleware',
+]
+# CORS is handled by the API Gateway — do not configure it here.
+APPEND_SLASH = False
+```
+
+---
+
+### PHP `vendor/autoload.php` Not Found — Composer Dependencies Missing
+**Symptom**: PHP returns a fatal error: `Failed to open stream: No such file or directory` for `vendor/autoload.php`.
+
+**Cause**: The `docker-compose.yml` mounts `./php:/var/www/html` as a bind volume. This overwrites the container's entire `/var/www/html` directory — including the `vendor/` folder that was compiled into the Docker image during `composer install`. Since `./php/vendor` does not exist locally, the bind mount exposes an empty `vendor/` path to the container.
+
+**Fix**: Run `composer install` using the official `composer` Docker image so it writes into your local `./php/` directory (which is then picked up by the bind mount). This requires no local Composer installation:
+```bash
+docker run --rm -v /path/to/your/php:/app composer:2 install \
+  --no-dev --optimize-autoloader --working-dir=/app
+```
+
+---
+
+### Django `TypeError: Object of type Decimal is not JSON serializable`
+**Symptom**: `POST /api/checkout` returns `500`. Django logs show: `TypeError at /checkout — Object of type Decimal is not JSON serializable`.
+
+**Cause**: DRF's `OrderItemSerializer.validated_data` returns `OrderedDict` objects with `Decimal` price values. When these are passed directly to a Django `JSONField` via `Order.objects.create(items=item_serializer.validated_data, ...)`, Python's JSON encoder fails because `Decimal` is not natively JSON-serializable.
+
+**Fix**: Convert the validated items to plain dicts with `float` prices before saving in `django/checkout/views.py`:
+```python
+# Convert to plain dicts with JSON-safe types (Decimal → float)
+items_plain = [
+    {**dict(i), 'price': float(i['price'])}
+    for i in item_serializer.validated_data
+]
+
+order = Order.objects.create(
+    username=username,
+    items=items_plain,
+    total=total,
+)
 ```
 

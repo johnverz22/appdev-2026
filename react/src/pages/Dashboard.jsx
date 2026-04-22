@@ -5,6 +5,7 @@ import {
     ShoppingCart, Package, Shield, AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 // ── Nav card shared component ─────────────────────────────────────────────────
 const NavCard = ({ to, gradient, shadow, icon: Icon, label, description }) => (
@@ -73,6 +74,7 @@ const AdminDashboard = ({ user }) => (
 // ── Dashboard page ────────────────────────────────────────────────────────────
 const Dashboard = () => {
     const { user, isAdmin, logout } = useAuth();
+    usePageTitle(isAdmin ? 'Admin Panel' : 'Dashboard');
     const location = useLocation();
     const forbidden = location.state?.forbidden;
 

@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom';
 import { User, Lock, ArrowRight, Activity } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { GoogleLogin } from '@react-oauth/google';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 const Login = () => {
+    usePageTitle('Login');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');

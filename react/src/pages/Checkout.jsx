@@ -6,8 +6,10 @@ import {
 } from 'lucide-react';
 import phpApi from '../config/phpApi';
 import djangoApi from '../config/djangoApi';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 const Checkout = () => {
+    usePageTitle('Checkout');
     const [products, setProducts] = useState([]);
     const [cart, setCart] = useState({});          // { productId: qty }
     const [orders, setOrders] = useState([]);
@@ -18,7 +20,7 @@ const Checkout = () => {
 
     // ── Fetch products from PHP API ──────────────────────────────────────────
     useEffect(() => {
-        phpApi.get('/products')
+        phpApi.get('/api/products')
             .then(({ data }) => setProducts(data))
             .catch(() => setError('Failed to load products.'))
             .finally(() => setLoadingProducts(false));
@@ -26,7 +28,7 @@ const Checkout = () => {
 
     // ── Fetch existing orders from Django API ────────────────────────────────
     useEffect(() => {
-        djangoApi.get('/orders')
+        djangoApi.get('/api/orders')
             .then(({ data }) => setOrders(data))
             .catch(() => {}); // silently ignore on first load
     }, []);
@@ -61,7 +63,7 @@ const Checkout = () => {
                 price: i.price,
                 qty: i.qty,
             }));
-            const { data } = await djangoApi.post('/checkout', { items: payload });
+            const { data } = await djangoApi.post('/api/checkout', { items: payload });
             setSuccess(data);
             setCart({});
             setOrders(prev => [data, ...prev]);

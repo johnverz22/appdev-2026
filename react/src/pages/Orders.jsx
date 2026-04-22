@@ -6,6 +6,7 @@ import {
     ShoppingCart, Users, DollarSign,
 } from 'lucide-react';
 import djangoApi from '../config/djangoApi';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 const STATUS_COLORS = {
     confirmed: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
@@ -93,6 +94,7 @@ const OrderRow = ({ order }) => {
 
 // ── Orders page ───────────────────────────────────────────────────────────────
 const Orders = () => {
+    usePageTitle('All Orders');
     const [orders, setOrders]   = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError]     = useState('');
@@ -100,7 +102,7 @@ const Orders = () => {
     const [statusFilter, setStatusFilter] = useState('all');
 
     useEffect(() => {
-        djangoApi.get('/orders/all')
+        djangoApi.get('/api/orders/all')
             .then(({ data }) => setOrders(data))
             .catch((err) => setError(err.response?.data?.error || 'Failed to load orders.'))
             .finally(() => setLoading(false));

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import phpApi from '../config/phpApi';
 import { useAuth } from '../hooks/useAuth';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 const categoryColors = {
     Electronics: 'from-blue-500/20 to-cyan-500/20 border-blue-500/30 text-blue-300',
@@ -32,10 +33,10 @@ const ProductModal = ({ initial, onSave, onClose }) => {
         setError('');
         try {
             if (isEdit) {
-                const { data } = await phpApi.put(`/products/${initial.id}`, form);
+                const { data } = await phpApi.put(`/api/products/${initial.id}`, form);
                 onSave(data);
             } else {
-                const { data } = await phpApi.post('/products', form);
+                const { data } = await phpApi.post('/api/products', form);
                 onSave(data);
             }
         } catch (err) {
@@ -162,6 +163,7 @@ const ProductCard = ({ product, isAdmin, onEdit, onDelete }) => {
 const Catalog = () => {
     const { user } = useAuth();
     const isAdmin = user?.role === 'ROLE_ADMIN';
+    usePageTitle('Product Catalog');
 
     const [products, setProducts] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -171,7 +173,7 @@ const Catalog = () => {
     const [deleting, setDeleting] = useState(false);
 
     useEffect(() => {
-        phpApi.get('/products')
+        phpApi.get('/api/products')
             .then(({ data }) => setProducts(data))
             .catch((err) => {
                 if (err.response?.status === 401) {
@@ -197,7 +199,7 @@ const Catalog = () => {
         if (!deleteTarget) return;
         setDeleting(true);
         try {
-            await phpApi.delete(`/products/${deleteTarget.id}`);
+            await phpApi.delete(`/api/products/${deleteTarget.id}`);
             setProducts(prev => prev.filter(p => p.id !== deleteTarget.id));
             setDeleteTarget(null);
         } catch (err) {

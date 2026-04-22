@@ -28,9 +28,16 @@ class CheckoutView(APIView):
             for i in item_serializer.validated_data
         )
 
+        # Convert to plain dicts with JSON-safe types (Decimal → float)
+        # so Django's JSONField can serialize the items correctly.
+        items_plain = [
+            {**dict(i), 'price': float(i['price'])}
+            for i in item_serializer.validated_data
+        ]
+
         order = Order.objects.create(
             username=username,
-            items=item_serializer.validated_data,
+            items=items_plain,
             total=total,
         )
 

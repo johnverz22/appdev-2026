@@ -10,17 +10,16 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.auth',
     'rest_framework',
-    'corsheaders',
     'checkout',
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True
+# CORS is handled by the API Gateway — do not set CORS headers in Django.
+# APPEND_SLASH=False allows paths without trailing slashes (e.g. /api/checkout).
+APPEND_SLASH = False
 
 ROOT_URLCONF = 'core.urls'
 

@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Lock, User, UserPlus, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 const Register = () => {
+    usePageTitle('Register');
     const [formData, setFormData] = useState({
         username: '',
         password: '',

@@ -44,17 +44,21 @@ spring:
         - id: products-service
           uri: http://php:80 # Use Docker DNS for the PHP container
           predicates:
-            - Path=/api/products/**
+            - Path=/api/products,/api/products/**
           filters:
-            # RewritePath: Removes '/api/products' from the URL before sending to PHP
-            # e.g. /api/products/5 becomes /5 (which matches PHP's routes)
-            - RewritePath=/api/products(?<segment>/?.*), $\{segment}
+            # RewritePath: Strips only /api so PHP receives /products, /products/5 etc.
+            # e.g. /api/products   → /products
+            #      /api/products/5 → /products/5
+            - RewritePath=/api(?<segment>.*), ${segment}
 
         # 3. Checkout Service: Send /api/checkout/** and /api/orders/** to Django
         - id: checkout-service
           uri: http://django:8000
           predicates:
-            - Path=/api/checkout/**, /api/orders/**
+            - Path=/api/checkout,/api/checkout/**,/api/orders,/api/orders/**
+          filters:
+            # RewritePath: Strips /api so Django receives /checkout, /orders, /orders/all
+            - RewritePath=/api(?<segment>.*), ${segment}
 
 # ── Service Registry (Eureka) ────────────────────────────────────────────────
 eureka:
