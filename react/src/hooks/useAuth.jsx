@@ -48,8 +48,14 @@ export const AuthProvider = ({ children }) => {
         }
     }, [navigate]);
 
+    const googleLogin = useCallback(async (token) => {
+        const { data } = await api.post('/api/auth/google', { token });
+        setUser(data);
+        navigate('/dashboard');
+    }, [navigate]);
+
     return (
-        <AuthContext.Provider value={{ user, isAuthenticated: !!user, isAdmin: user?.role === 'ROLE_ADMIN', isLoading, login, register, logout }}>
+        <AuthContext.Provider value={{ user, isAuthenticated: !!user, isAdmin: user?.role === 'ROLE_ADMIN', isLoading, login, googleLogin, register, logout }}>
             {children}
         </AuthContext.Provider>
     );

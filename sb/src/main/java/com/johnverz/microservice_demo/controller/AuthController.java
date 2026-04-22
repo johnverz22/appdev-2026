@@ -23,6 +23,12 @@ import com.johnverz.microservice_demo.security.JwtUtils;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Map;
+import java.util.Collections;
+import java.util.UUID;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
+import com.google.api.client.http.javanet.NetHttpTransport;
+import com.google.api.client.json.gson.GsonFactory;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -37,6 +43,7 @@ public class AuthController {
     @Value("${jwt.cookie.domain}")   private String jwtDomain;
     @Value("${admin.username}")      private String adminUsername;
     @Value("${admin.password}")      private String adminPassword;
+    @Value("${google.client.id:placeholder}") private String googleClientId;
 
     // ── Seed admin account on startup ─────────────────────────────────────────
     @EventListener(ApplicationReadyEvent.class)
@@ -45,6 +52,7 @@ public class AuthController {
             userRepository.save(new User(
                 adminUsername,
                 encoder.encode(adminPassword),
+                adminUsername + "@admin.com",
                 "ROLE_ADMIN"
             ));
             System.out.println("[Auth] Admin account created: " + adminUsername);
@@ -110,12 +118,50 @@ public class AuthController {
         userRepository.save(new User(
             signUpRequest.getUsername(),
             encoder.encode(signUpRequest.getPassword()),
+            null,
             role
         ));
 
         String jwt = jwtUtils.generateToken(signUpRequest.getUsername(), role);
         response.addCookie(buildJwtCookie(jwt));
         return ResponseEntity.ok(Map.of("username", signUpRequest.getUsername(), "role", role));
+    }
+
+    // ── POST /api/auth/google ──────────────────────────────────────────────────
+    @PostMapping("/google")
+    public ResponseEntity<?> googleLogin(@RequestBody Map<String, String> request, HttpServletResponse response) {
+        try {
+            GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(
+                    new NetHttpTransport(), new GsonFactory())
+                .setAudience(Collections.singletonList(googleClientId))
+                .build();
+                
+            GoogleIdToken idToken = verifier.verify(request.get("token"));
+            if (idToken != null) {
+                GoogleIdToken.Payload payload = idToken.getPayload();
+                String email = payload.getEmail();
+                
+                User user = userRepository.findByEmail(email).orElse(null);
+                
+                if (user == null) {
+                    user = new User();
+                    user.setUsername(email.split("@")[0]);
+                    user.setEmail(email);
+                    user.setPassword(encoder.encode(UUID.randomUUID().toString()));
+                    user.setRole("ROLE_USER");
+                    userRepository.save(user);
+                }
+                
+                String jwt = jwtUtils.generateToken(user.getUsername(), user.getRole());
+                response.addCookie(buildJwtCookie(jwt));
+                   
+                return ResponseEntity.ok(Map.of("username", user.getUsername(), "role", user.getRole()));
+            } else {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Invalid ID token."));
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     // ── POST /api/auth/logout ─────────────────────────────────────────────────

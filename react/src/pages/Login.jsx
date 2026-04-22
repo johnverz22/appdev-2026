@@ -2,13 +2,26 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { User, Lock, ArrowRight, Activity } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { GoogleLogin } from '@react-oauth/google';
 
 const Login = () => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const { login } = useAuth();
+    const { login, googleLogin } = useAuth();
+
+    const handleGoogleSuccess = async (credentialResponse) => {
+        setIsLoading(true);
+        setError('');
+        try {
+            await googleLogin(credentialResponse.credential);
+        } catch (err) {
+            setError(err.response?.data?.message || 'Google Login failed.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const handleLogin = async (e) => {
         e.preventDefault();
@@ -103,6 +116,27 @@ const Login = () => {
                             )}
                         </button>
                     </form>
+
+                    <div className="mt-6">
+                        <div className="relative">
+                            <div className="absolute inset-0 flex items-center">
+                                <div className="w-full border-t border-slate-700/50"></div>
+                            </div>
+                            <div className="relative flex justify-center text-sm">
+                                <span className="px-2 bg-slate-900 text-slate-400">Or continue with</span>
+                            </div>
+                        </div>
+                        <div className="mt-6 flex justify-center">
+                            <GoogleLogin
+                                onSuccess={handleGoogleSuccess}
+                                onError={() => {
+                                    setError('Google Login window closed or failed');
+                                }}
+                                theme="filled_black"
+                                shape="pill"
+                            />
+                        </div>
+                    </div>
 
                     <div className="mt-8 text-center">
                         <p className="text-slate-400 text-sm flex items-center justify-center gap-1 border-t border-slate-700/50 pt-6">
