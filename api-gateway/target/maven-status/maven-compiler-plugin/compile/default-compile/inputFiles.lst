@@ -1,0 +1,2 @@
+/app/src/main/java/com/johnverz/apigateway/filter/JwtAuthFilter.java
+/app/src/main/java/com/johnverz/apigateway/ApiGatewayApplication.java

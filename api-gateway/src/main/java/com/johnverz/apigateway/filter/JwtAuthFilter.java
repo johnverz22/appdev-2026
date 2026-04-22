@@ -28,8 +28,11 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
 
-        // Skip auth for login/register
-        if (path.contains("/api/auth/login") || path.contains("/api/auth/register")) {
+        // Skip auth for login/register/google AND preflight CORS requests
+        if (exchange.getRequest().getMethod().name().equals("OPTIONS") || 
+            path.contains("/api/auth/login") || 
+            path.contains("/api/auth/register") || 
+            path.contains("/api/auth/google")) {
             return chain.filter(exchange);
         }
 

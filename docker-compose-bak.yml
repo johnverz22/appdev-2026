@@ -2,7 +2,7 @@ services:
 
   # ── Service Registry (Eureka Server) ───────────────────────────────────────
   eureka-server:
-    image: eclipse-temurin:17-jdk
+    image: eclipse-temurin:17-jdk-alpine
     container_name: eureka_server
     ports:
       - "8761:8761"
@@ -13,7 +13,7 @@ services:
 
   # ── API Gateway (Spring Cloud Gateway) ────────────────────────────────────
   api-gateway:
-    image: eclipse-temurin:17-jdk
+    image: eclipse-temurin:17-jdk-alpine
     container_name: api_gateway
     depends_on:
       - eureka-server
@@ -30,7 +30,6 @@ services:
   # ── Database ───────────────────────────────────────────────────────────────
   db:
     image: postgres:15-alpine
-    platform: linux/amd64 # Forces Rosetta emulation if ARM image is missing
     container_name: postgres_db
     environment:
       POSTGRES_DB: auth_db
@@ -49,13 +48,14 @@ services:
 
   # ── Auth service (Spring Boot) ─────────────────────────────────────────────
   sb:
-    image: eclipse-temurin:17-jdk
+    image: eclipse-temurin:17-jdk-alpine
     container_name: springboot_app
     depends_on:
       db:
         condition: service_healthy
       eureka-server:
         condition: service_started
+    # No public ports — only reachable via Gateway
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/auth_db
       - SPRING_DATASOURCE_USERNAME=user
@@ -78,6 +78,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # No public ports — only reachable via Gateway
     environment:
       - DB_HOST=db
       - DB_PORT=5432
@@ -98,6 +99,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # No public ports — only reachable via Gateway
     environment:
       - DB_HOST=db
       - DB_PORT=5432

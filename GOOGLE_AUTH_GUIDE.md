@@ -101,6 +101,39 @@ public ResponseEntity<?> googleLogin(@RequestBody Map<String, String> request, H
 }
 ```
 
+### 3. Configure CORS and Gateway Bypasses (Critical for Preflight Requests)
+CORS must be handled at the **API Gateway level** — the browser only ever talks to the gateway directly, so that is where the `Access-Control-Allow-*` headers must originate. Configuring CORS inside `sb` alone is insufficient because the gateway will still reject the preflight `OPTIONS` request before it ever reaches `sb`.
+
+**File Changed**: `api-gateway/src/main/resources/application.yml`
+- Added a `globalcors` block under `spring.cloud.gateway` to respond to browser preflight requests with the correct CORS headers:
+
+```yaml
+spring:
+  cloud:
+    gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins:
+              - "http://localhost:3000"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders:
+              - "*"
+            allowCredentials: true
+```
+
+**File Changed**: `api-gateway/src/main/java/com/johnverz/apigateway/filter/JwtAuthFilter.java`
+- Bypassed the JWT check for `OPTIONS` preflight requests and the `/api/auth/google` endpoint so the filter does not block them before the CORS response can be formed.
+
+**File Changed**: `sb/src/main/java/com/johnverz/microservice_demo/security/SecurityConfig.java`
+- Added `/api/auth/google` to `.permitAll()` so Spring Security in `sb` does not reject the forwarded POST after the preflight is cleared.
+- **No `CorsConfigurationSource` bean needed** — CORS is handled entirely by the gateway.
+
 ---
 
 ## Step 4: Frontend React Ecosystem
@@ -124,3 +157,119 @@ Exported the new bridging function to securely sync state.
 Rendered the physical Google Login elements inside the form schema.
 **File Changed**: `react/src/pages/Login.jsx`
 - Appended `<GoogleLogin />` below the classic password form. Triggers `handleGoogleSuccess`, returning visual success feedback (or error logs) if a cross-site sign in fails midway through.
+
+---
+
+## Troubleshooting
+
+### `403 Forbidden` on `OPTIONS /api/auth/google` — CORS Missing Allow Origin
+**Symptom**: The browser sends a preflight `OPTIONS` request to the API Gateway and receives a `403 Forbidden` with no `Access-Control-Allow-Origin` header. The browser then blocks the actual `POST` request.
+
+**Cause**: Spring Cloud Gateway (WebFlux-based) has its own CORS layer that runs *before* any custom filters. Without a `globalcors` configuration, the gateway rejects preflight requests with a 403 before they ever reach `JwtAuthFilter` or the downstream `sb` service. Configuring CORS only inside `sb`'s `SecurityConfig` is not sufficient — the gateway blocks the request at the edge before forwarding it.
+
+**Fix**: Add a `globalcors` block to `api-gateway/src/main/resources/application.yml` (see Step 3.3 above). Then restart the gateway container to pick up the change.
+
+> [!NOTE]
+> Do **not** add `CorsConfigurationSource` to `sb`'s `SecurityConfig`. CORS is the gateway's responsibility. `sb` only needs `/api/auth/google` in `.permitAll()` so Spring Security doesn't block the forwarded POST after the preflight passes.
+
+---
+
+### Spring Boot `sb` Fails to Compile or Boot Up (CORS Persists Despite Fixes)
+If CORS errors continue even after the gateway config is set, ensure `sb` itself has compiled and booted successfully. If the auth service is offline, the gateway has nothing to proxy to and returns errors without CORS headers.
+
+During the social login integration, a few structural errors can arise in the `pom.xml` causing compilation failure:
+1. **Missing Spring Cloud Dependency Management**: Ensure `spring-cloud-dependencies` is declared in `<dependencyManagement>` so Eureka client dependencies resolve their versions.
+2. **XML Syntax Malformations**: Check for duplicated or malformed closing tags (e.g., duplicated `</project>` or stray `roupId>` tags) at the end of the file.
+
+---
+
+### `ClassNotFoundException: WebMvcAutoConfiguration` on Startup
+**Symptom**: The `sb` container starts but immediately crashes with:
+```
+Caused by: java.lang.ClassNotFoundException: org.springframework.boot.autoconfigure.web.servlet.WebMvcAutoConfiguration
+```
+
+**Cause**: The `spring-boot-starter-parent` version in `sb/pom.xml` was set to `4.0.3`. Spring Boot 4.x restructured its auto-configuration internals and the `WebMvcAutoConfiguration` class no longer exists at that path. This is incompatible with `spring-boot-devtools` (version `4.0.3`), which tries to reload classes from the old namespace using its restart classloader.
+
+**Fix**: Downgrade `spring-boot-starter-parent` to `3.2.5` (the same version used by the `api-gateway`):
+```xml
+<parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.2.5</version>
+    <relativePath/>
+</parent>
+```
+
+---
+
+### Multiple `'dependencies.dependency.version' is missing` Errors After Downgrade
+**Symptom**: After downgrading to Spring Boot 3.2.5, Maven fails with errors like:
+```
+'dependencies.dependency.version' for org.springframework.boot:spring-boot-starter-flyway:jar is missing
+'dependencies.dependency.version' for org.flywaydb:flyway-database-postgresql:jar is missing
+```
+
+**Cause**: The `pom.xml` contained invented artifact IDs (e.g., `spring-boot-starter-flyway`, `spring-boot-starter-flyway-test`, `spring-boot-starter-data-jpa-test`) that do not exist in any Maven repository, and `flyway-database-postgresql` is only managed by the Spring Boot BOM from version 3.3.x onwards — not 3.2.5.
+
+**Fix**: Use only real, standard artifact IDs that exist in Maven Central. For the correct `sb/pom.xml` dependency list under Spring Boot 3.2.5:
+
+| Purpose | Correct Artifact ID |
+|---|---|
+| Flyway (core) | `org.flywaydb:flyway-core` (version managed by Boot BOM) |
+| Flyway + PostgreSQL | ~~`flyway-database-postgresql`~~ — not needed in Boot 3.2.x; `flyway-core` handles it |
+| Testing | `spring-boot-starter-test` + `spring-security-test` |
+| JPA | `spring-boot-starter-data-jpa` |
+
+---
+
+### `CannotLoadBeanClassException` / `Cannot find class [SecurityConfig]` After Fixing `pom.xml`
+**Symptom**: Even after fixing the `pom.xml`, `sb` still crashes on boot with:
+```
+CannotLoadBeanClassException: Cannot find class [com.johnverz.microservice_demo.security.SecurityConfig]
+```
+
+**Cause**: The `target/` directory contains stale `.class` files compiled against the old Spring Boot 4.x JARs. The `spring-boot-devtools` restart classloader picks these up instead of the freshly compiled classes, resulting in a classloading conflict.
+
+**Fix**: Always run a full clean build after changing the `pom.xml` to wipe the stale `target/` directory:
+```bash
+./mvnw clean package -DskipTests
+```
+Then restart the Docker containers — they will pick up the freshly packaged JARs.
+
+---
+
+### `503 Service Unavailable` — "Cannot execute request on any known server" (Eureka)
+**Symptom**: CORS is resolved but all requests to `/api/auth/*` return `503`. The `sb` logs show:
+```
+Connect to http://localhost:8761 ... Connection refused
+DiscoveryClient_UNKNOWN/... - registration failed Cannot execute request on any known server
+```
+
+**Cause**: Two misconfigurations in `sb/src/main/resources/application.properties`:
+
+1. **Wrong Eureka URL** — No `eureka.client.service-url.defaultZone` was set, so the Eureka client defaulted to `http://localhost:8761`. Inside Docker, `localhost` refers to the container itself, not the host machine or other containers.
+2. **Service registered as `UNKNOWN`** — No `spring.application.name` was set, so `sb` registered under the name `UNKNOWN`. The API Gateway routes using `lb://sb`, so it could never resolve the service.
+
+**Fix**: Add the following to `sb/src/main/resources/application.properties`:
+```properties
+# ===============================
+# EUREKA SERVICE REGISTRY
+# ===============================
+eureka.client.service-url.defaultZone=http://eureka-server:8761/eureka/
+spring.application.name=sb
+```
+
+---
+
+### `sb` Cannot Connect to PostgreSQL on Startup
+**Symptom**: The `sb` container fails on startup with a database connection refused error.
+
+**Cause**: `spring.datasource.url` was set to `jdbc:postgresql://localhost:5434/auth_db`. This is the host machine's mapped port — valid for running locally outside Docker, but **not** inside a container. Inside Docker, `localhost` is the container itself.
+
+**Fix**: Use the Docker service name and internal port in `sb/src/main/resources/application.properties`:
+```properties
+# Use Docker service name and internal port — NOT localhost:5434
+spring.datasource.url=jdbc:postgresql://db:5432/auth_db
+```
+

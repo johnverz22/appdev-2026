@@ -12,7 +12,25 @@ spring:
         locator:
           enabled: true
           lower-case-service-id: true
-      
+
+      # ── Global CORS Policy ─────────────────────────────────────────────────
+      # Allows the React frontend (localhost:3000) to make cross-origin requests
+      # through the gateway. This handles the browser's preflight OPTIONS check.
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins:
+              - "http://localhost:3000"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders:
+              - "*"
+            allowCredentials: true
+
       # ── Routing Rules ──────────────────────────────────────────────────────
       # These rules tell the Gateway where to send incoming requests.
       routes:
